@@ -7,11 +7,9 @@
 blueprint:
   name: Sincronização de Múltiplas Entidades
   description: >
-    Mantém duas ou mais entidades de luz ou interruptor sincronizadas.
-
-    Ao alterar qualquer uma das entidades para ligado ou desligado, altera as demais para o mesmo Estado.
-
-    Pode misturar livremente entidades de luz e interruptor.
+    Sincroniza dois ou mais interruptores ou luzes.
+    Se uma entidade liga, todas ligam. Se uma entidade desliga, todas desligam.
+    Pode misturar interruptores e luzes à vontade.
   domain: automation
 
   input:
