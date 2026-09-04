@@ -1,3 +1,9 @@
+# Esse blueprint cria uma automação para sincronizar múltiplas entidades de luz e interruptor.
+# A automação é bi-direcional: se uma entidade é ligada, todas ligam. Se uma entidade é desligada, todas desligam.
+# Problema conhecido: sincronizei três interruptores e uma lâmpada no mesmo blueprint, e as entidades ficaram malucas sem saber se apagavam ou acendiam.
+#                     Nesse caso, recomendo criar duas automações com esse blueprint: uma para os interruptores, e uma para sincronizar um dos interruptores com a luz.
+#                     Mas se for o caso de ter apenas uma luz e um interruptor, esse blueprint funciona bem.
+
 blueprint:
   name: Sincronização de Múltiplas Entidades
   description: >
