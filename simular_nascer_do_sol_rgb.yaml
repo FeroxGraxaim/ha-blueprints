@@ -1,13 +1,21 @@
 blueprint:
-  name: Nascer do Sol RGB
+  name: Simulador de Nascer do Sol RGB
   description: >
-    Script para simular o nascer do sol com uma lâmpada inteligente.
-    Permite selecionar manualmente RGB, RGBW ou RGBWW, ou detectar
-    automaticamente o melhor modo disponível. A cor final da primeira etapa
-    pode ser ajustada para combinar visualmente com o branco mais quente
-    suportado pela lâmpada. Quando usado em RGB puro, utiliza temperatura
-    de cor na segunda etapa e permite ajustar o brilho máximo da etapa RGB
-    para compensar diferenças de luminosidade.
+    Script para simular nascer do sol com lâmpada inteligente RGB, RGBW ou RGBWW.
+    Funcionamento:
+      - No modo RGB (duas fases):
+        - Na primeira fase, a lâmpada começa vermelha com brilho mínimo.
+          Ao mesmo tempo que o brilho aumenta no decorrer do tempo, a cor RGB vai mudando gradativamente para o mais
+          próximo possível de branco-quente. Brilho final do modo RGB configurável.
+        - Na segunda fase, o script muda o modo da lâmpada para branco-quente (2700K) em brilho mínimo. Ao mesmo tempo que o brilho aumenta
+          no decorrer do tempo, a temperatura de cor vai mudando gradativamente para branco-neutro (5500K).
+      - Modos RGBW e RGBWW:
+        - A lâmpada faz todo o processo do modo RGB, porém em uma única etapa ao invés de duas. 
+          É uma transição ainda mais suave do RGB para o branco. 
+
+      **Obs:** O modo RGB foi calibrado com base nas lâmpadas Elgin Smart Color.
+      **Importante:** os modos RGBW e RGBWW não foram testados com lâmpadas RGBW e RGBWW! Será bem-vinda contribuição
+      no repositório do GitHub.
   domain: script
 
   input:
@@ -25,8 +33,7 @@ blueprint:
       name: Modo de cor
       description: >
         Automático detecta RGBWW, RGBW ou RGB nessa ordem.
-        Use a seleção manual se a integração detectar incorretamente
-        os recursos da lâmpada.
+        Se não for detectado corretamente, use a seleção manual.
       default: auto
       selector:
         select:
@@ -41,24 +48,23 @@ blueprint:
               value: rgbww
 
     cor_final_etapa1:
-      name: Cor final da primeira etapa
+      name: Cor final da primeira fase (Apenas RGB)
       description: >
-        Cor atingida ao final da primeira etapa, antes da transição para
-        os canais brancos ou para temperatura de cor. Ajuste caso a cor
-        padrão seja visualmente muito diferente do Kelvin mínimo da lâmpada.
-        O padrão é #D45E1F.
+        Cor final da primeira fase, antes da transição para branco-quente.
+        O padrão é #FFA757 (2700K).
+        - Dica: para 3000K, use #FFB16E. Para 3500K, use #FFC18D.
       default:
-        - 212
-        - 94
-        - 31
+        - 255
+        - 167
+        - 87
       selector:
         color_rgb:
 
     brilho_max_etapa1:
-      name: Brilho máximo da primeira etapa
+      name: Brilho máximo da primeira fase (Apenas RGB)
       description: >
-        Usado somente no modo RGB. Ajuste para que não haja salto perceptível
-        de brilho quando a lâmpada passar do modo RGB para temperatura de cor.
+        Ajuste conforme tua lâmpada, para que não haja salto de brilho perceptível entre as duas fases.
+        
       default: 100
       selector:
         number:
