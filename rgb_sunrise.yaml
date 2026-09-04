@@ -1,0 +1,323 @@
+blueprint:
+  name: Nascer do Sol RGB
+  description: >
+    Script para simular o nascer do sol com uma lâmpada inteligente.
+    Permite selecionar manualmente RGB, RGBW ou RGBWW, ou detectar
+    automaticamente o melhor modo disponível. A cor final da primeira etapa
+    pode ser ajustada para combinar visualmente com o branco mais quente
+    suportado pela lâmpada. Quando usado em RGB puro, utiliza temperatura
+    de cor na segunda etapa e permite ajustar o brilho máximo da etapa RGB
+    para compensar diferenças de luminosidade.
+  domain: script
+
+  input:
+    duracao:
+      name: Duração
+      description: Tempo total aproximado das 200 etapas.
+      default:
+        hours: 0
+        minutes: 1
+        seconds: 40
+      selector:
+        duration:
+
+    modo_cor:
+      name: Modo de cor
+      description: >
+        Automático detecta RGBWW, RGBW ou RGB nessa ordem.
+        Use a seleção manual se a integração detectar incorretamente
+        os recursos da lâmpada.
+      default: auto
+      selector:
+        select:
+          options:
+            - label: Automático
+              value: auto
+            - label: RGB
+              value: rgb
+            - label: RGBW
+              value: rgbw
+            - label: RGBWW
+              value: rgbww
+
+    cor_final_etapa1:
+      name: Cor final da primeira etapa
+      description: >
+        Cor atingida ao final da primeira etapa, antes da transição para
+        os canais brancos ou para temperatura de cor. Ajuste caso a cor
+        padrão seja visualmente muito diferente do Kelvin mínimo da lâmpada.
+        O padrão é #D45E1F.
+      default:
+        - 212
+        - 94
+        - 31
+      selector:
+        color_rgb:
+
+    brilho_max_etapa1:
+      name: Brilho máximo da primeira etapa
+      description: >
+        Usado somente no modo RGB. Ajuste para que não haja salto perceptível
+        de brilho quando a lâmpada passar do modo RGB para temperatura de cor.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+
+    lampada:
+      name: Lâmpada
+      description: >
+        Se Automático estiver selecionado, o script tentará detectar
+        RGBWW, RGBW ou RGB.
+      selector:
+        entity:
+          filter:
+            - domain: light
+
+    interruptores_desligar:
+      name: Interruptor(es) para desligar
+      description: >
+        Opcional. Interruptores que serão desligados antes de iniciar
+        a simulação.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: switch
+
+variables:
+  lampada_entidade: !input lampada
+  duracao_config: !input duracao
+  brilho_max_rgb: !input brilho_max_etapa1
+  cor_final_rgb: !input cor_final_etapa1
+  modo_escolhido: !input modo_cor
+  interruptores: !input interruptores_desligar
+
+  duracao_segundos: >-
+    {{
+      ((duracao_config.get('hours', 0) | int) * 3600)
+      + ((duracao_config.get('minutes', 0) | int) * 60)
+      + (duracao_config.get('seconds', 0) | int)
+    }}
+
+  modo_efetivo: >-
+    {% set modos = state_attr(lampada_entidade, 'supported_color_modes') or [] %}
+    {% if modo_escolhido != 'auto' %}
+      {{ modo_escolhido }}
+    {% elif 'rgbww' in modos %}
+      rgbww
+    {% elif 'rgbw' in modos %}
+      rgbw
+    {% else %}
+      rgb
+    {% endif %}
+
+sequence:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ interruptores | length > 0 }}"
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: !input interruptores_desligar
+
+  - repeat:
+      count: 200
+      sequence:
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ repeat.index <= 100 }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ modo_efetivo == 'rgbww' }}"
+                      sequence:
+                        - action: light.turn_on
+                          target:
+                            entity_id: !input lampada
+                          data: |
+                            {% set t = repeat.index %}
+                            {% set p = (t - 1) / 99 %}
+                            {% set r_final = cor_final_rgb[0] | int %}
+                            {% set g_final = cor_final_rgb[1] | int %}
+                            {% set b_final = cor_final_rgb[2] | int %}
+                            {% set r = (255 + ((r_final - 255) * p)) | round | int %}
+                            {% set g = (g_final * p) | round | int %}
+                            {% set b = (b_final * p) | round | int %}
+                            {
+                              "brightness_pct": {{ t }},
+                              "rgbww_color": [
+                                {{ r }},
+                                {{ g }},
+                                {{ b }},
+                                0,
+                                0
+                              ]
+                            }
+
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ modo_efetivo == 'rgbw' }}"
+                      sequence:
+                        - action: light.turn_on
+                          target:
+                            entity_id: !input lampada
+                          data: |
+                            {% set t = repeat.index %}
+                            {% set p = (t - 1) / 99 %}
+                            {% set r_final = cor_final_rgb[0] | int %}
+                            {% set g_final = cor_final_rgb[1] | int %}
+                            {% set b_final = cor_final_rgb[2] | int %}
+                            {% set r = (255 + ((r_final - 255) * p)) | round | int %}
+                            {% set g = (g_final * p) | round | int %}
+                            {% set b = (b_final * p) | round | int %}
+                            {
+                              "brightness_pct": {{ t }},
+                              "rgbw_color": [
+                                {{ r }},
+                                {{ g }},
+                                {{ b }},
+                                0
+                              ]
+                            }
+
+                  default:
+                    - action: light.turn_on
+                      target:
+                        entity_id: !input lampada
+                      data: |
+                        {% set t = repeat.index %}
+                        {% set p = (t - 1) / 99 %}
+                        {% set r_final = cor_final_rgb[0] | int %}
+                        {% set g_final = cor_final_rgb[1] | int %}
+                        {% set b_final = cor_final_rgb[2] | int %}
+                        {% set r = (255 + ((r_final - 255) * p)) | round | int %}
+                        {% set g = (g_final * p) | round | int %}
+                        {% set b = (b_final * p) | round | int %}
+                        {% set brilho =
+                          1 + ((t - 1) * (brilho_max_rgb - 1) / 99)
+                        %}
+                        {
+                          "brightness_pct": {{ brilho | round | int }},
+                          "rgb_color": [
+                            {{ r }},
+                            {{ g }},
+                            {{ b }}
+                          ]
+                        }
+
+            - conditions:
+                - condition: template
+                  value_template: "{{ repeat.index > 100 }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ modo_efetivo == 'rgbww' }}"
+                      sequence:
+                        - action: light.turn_on
+                          target:
+                            entity_id: !input lampada
+                          data: |
+                            {% set t = repeat.index %}
+                            {% set p = (t - 101) / 99 %}
+
+                            {% set min_k =
+                              state_attr(
+                                lampada_entidade,
+                                'min_color_temp_kelvin'
+                              ) | int(2700)
+                            %}
+
+                            {% set max_k =
+                              state_attr(
+                                lampada_entidade,
+                                'max_color_temp_kelvin'
+                              ) | int(6500)
+                            %}
+
+                            {% set inicio_k = [2000, min_k] | max %}
+                            {% set fim_k = [3077, max_k] | min %}
+
+                            {% set alvo_k =
+                              inicio_k + ((fim_k - inicio_k) * p)
+                            %}
+
+                            {% set warm_mired = 1000000 / min_k %}
+                            {% set cold_mired = 1000000 / max_k %}
+                            {% set alvo_mired = 1000000 / alvo_k %}
+
+                            {% set cw =
+                              (
+                                255
+                                * (warm_mired - alvo_mired)
+                                / (warm_mired - cold_mired)
+                              )
+                            %}
+
+                            {% set cw = [[cw, 0] | max, 255] | min %}
+                            {% set ww = 255 - cw %}
+
+                            {
+                              "brightness_pct": {{ t - 100 }},
+                              "rgbww_color": [
+                                0,
+                                0,
+                                0,
+                                {{ cw | round | int }},
+                                {{ ww | round | int }}
+                              ]
+                            }
+
+                    - conditions:
+                        - condition: template
+                          value_template: "{{ modo_efetivo == 'rgbw' }}"
+                      sequence:
+                        - action: light.turn_on
+                          target:
+                            entity_id: !input lampada
+                          data: |
+                            {% set t = repeat.index %}
+                            {% set p = (t - 101) / 99 %}
+
+                            {% set g = (137 + (43 * p)) | round | int %}
+                            {% set b = (14 + (101 * p)) | round | int %}
+                            {% set w = b %}
+                            {% set r = 255 - w %}
+                            {% set g2 = [g - w, 0] | max %}
+
+                            {
+                              "brightness_pct": {{ t - 100 }},
+                              "rgbw_color": [
+                                {{ r }},
+                                {{ g2 }},
+                                0,
+                                {{ w }}
+                              ]
+                            }
+
+                  default:
+                    - action: light.turn_on
+                      target:
+                        entity_id: !input lampada
+                      data: |
+                        {% set t = repeat.index %}
+                        {% set mired =
+                          500 - ((t - 100) * (500 - 325) / 100)
+                        %}
+                        {
+                          "brightness_pct": {{ [t - 100, 100] | min }},
+                          "color_temp_kelvin": {{ (1000000 / mired) | int }}
+                        }
+
+        - delay: "{{ (duracao_segundos | float) / 200 }}"
+
+mode: single

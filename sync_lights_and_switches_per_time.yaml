@@ -1,0 +1,243 @@
+blueprint:
+  name: Sincronizar Interruptores/Luzes por Horário
+  description: >
+    Sincroniza uma entidade base com diferentes luzes ou interruptores
+    conforme o horário.
+
+    Tanto a entidade base quanto os alvos podem ser entidades light ou switch.
+
+    A sincronização é bidirecional:
+    - alterar a entidade base altera o alvo da rota ativa;
+    - alterar o alvo da rota ativa altera a entidade base.
+
+    A lâmpada pode permanecer permanentemente alimentada; o interruptor
+    funciona apenas como comando lógico.
+
+    Se o horário inicial e final forem iguais, a rota fica ativa o dia inteiro.
+
+    Horários atravessando a meia-noite são permitidos,
+    por exemplo 22:00 até 06:00.
+
+  domain: automation
+  author: Ferox
+
+  input:
+    base:
+      name: Interruptor/luz base
+      description: >
+        Entidade que terá seu alvo alterado conforme o horário.
+        Pode ser light ou switch.
+      selector:
+        entity:
+          filter:
+            - domain: switch
+            - domain: light
+
+    rotas:
+      name: Rotas
+      description: >
+        Adicione quantas rotas quiser e determine qual entidade
+        ficará sincronizada com a entidade base em cada horário.
+      selector:
+        object:
+          multiple: true
+          label_field: alvo
+          fields:
+            inicio:
+              label: Horário inicial
+              required: true
+              selector:
+                time:
+
+            fim:
+              label: Horário final
+              required: true
+              selector:
+                time:
+
+            alvo:
+              label: Alvo
+              required: true
+              selector:
+                entity:
+                  filter:
+                    - domain: switch
+                    - domain: light
+
+variables:
+  base: !input base
+  rotas: !input rotas
+
+triggers:
+  - trigger: event
+    event_type: state_changed
+
+conditions:
+  - condition: template
+    value_template: >
+      {% set entidade = trigger.event.data.entity_id %}
+      {% set anterior = trigger.event.data.old_state %}
+      {% set novo = trigger.event.data.new_state %}
+
+      {{
+        entidade is string
+        and (
+          entidade.startswith('switch.')
+          or entidade.startswith('light.')
+        )
+        and anterior is not none
+        and novo is not none
+        and anterior.state != novo.state
+        and novo.state in ['on', 'off']
+      }}
+
+  - condition: template
+    value_template: >
+      {% set origem = trigger.event.data.entity_id %}
+      {% set hora = now().strftime('%H:%M:%S') %}
+      {% set ns = namespace(valida=false) %}
+
+      {% for rota in rotas %}
+        {% set inicio = rota.get('inicio', '00:00:00') | string %}
+        {% set fim = rota.get('fim', '00:00:00') | string %}
+        {% set alvo = rota.get('alvo', '') %}
+
+        {% set ativa =
+          inicio == fim
+          or
+          (
+            inicio < fim
+            and hora >= inicio
+            and hora < fim
+          )
+          or
+          (
+            inicio > fim
+            and (
+              hora >= inicio
+              or hora < fim
+            )
+          )
+        %}
+
+        {% if ativa and (origem == base or origem == alvo) %}
+          {% set ns.valida = true %}
+        {% endif %}
+      {% endfor %}
+
+      {{ ns.valida }}
+
+actions:
+  - variables:
+      origem: "{{ trigger.event.data.entity_id }}"
+      estado_desejado: "{{ trigger.event.data.new_state.state }}"
+
+      alvos: >
+        {% set hora = now().strftime('%H:%M:%S') %}
+        {% set ns = namespace(entidades=[]) %}
+
+        {% if origem == base %}
+
+          {% for rota in rotas %}
+            {% set inicio = rota.get('inicio', '00:00:00') | string %}
+            {% set fim = rota.get('fim', '00:00:00') | string %}
+            {% set alvo = rota.get('alvo', '') %}
+
+            {% set ativa =
+              inicio == fim
+              or
+              (
+                inicio < fim
+                and hora >= inicio
+                and hora < fim
+              )
+              or
+              (
+                inicio > fim
+                and (
+                  hora >= inicio
+                  or hora < fim
+                )
+              )
+            %}
+
+            {% if
+              ativa
+              and alvo != ''
+              and alvo != base
+              and alvo not in ns.entidades
+              and states(alvo) != estado_desejado
+              and states(alvo) not in ['unknown', 'unavailable']
+            %}
+              {% set ns.entidades = ns.entidades + [alvo] %}
+            {% endif %}
+          {% endfor %}
+
+        {% else %}
+
+          {% set ns = namespace(entidades=[], origem_ativa=false) %}
+
+          {% for rota in rotas %}
+            {% set inicio = rota.get('inicio', '00:00:00') | string %}
+            {% set fim = rota.get('fim', '00:00:00') | string %}
+            {% set alvo = rota.get('alvo', '') %}
+
+            {% set ativa =
+              inicio == fim
+              or
+              (
+                inicio < fim
+                and hora >= inicio
+                and hora < fim
+              )
+              or
+              (
+                inicio > fim
+                and (
+                  hora >= inicio
+                  or hora < fim
+                )
+              )
+            %}
+
+            {% if ativa and origem == alvo %}
+              {% set ns.origem_ativa = true %}
+            {% endif %}
+          {% endfor %}
+
+          {% if
+            ns.origem_ativa
+            and base != origem
+            and states(base) != estado_desejado
+            and states(base) not in ['unknown', 'unavailable']
+          %}
+            {% set ns.entidades = [base] %}
+          {% endif %}
+
+        {% endif %}
+
+        {{ ns.entidades }}
+
+  - condition: template
+    value_template: "{{ alvos | count > 0 }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ estado_desejado == 'on' }}"
+        sequence:
+          - action: homeassistant.turn_on
+            target:
+              entity_id: "{{ alvos }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ estado_desejado == 'off' }}"
+        sequence:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: "{{ alvos }}"
+
+mode: queued
+max: 50
+max_exceeded: silent

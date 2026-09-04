@@ -1,0 +1,75 @@
+blueprint:
+  name: Nascer do Sol Kelvin
+  description: >
+    Acende gradualmente uma lâmpada, começando no brilho 1 e aumentando
+    50 níveis. Horário, duração, lâmpada e interruptores iniciais são configuráveis.
+  domain: script
+
+  input:
+
+    duracao:
+      name: Duração
+      description: Tempo total aproximado da progressão.
+      default:
+        hours: 1
+        minutes: 23
+        seconds: 20
+      selector:
+        duration:
+
+    lampada:
+      name: Lâmpada
+      selector:
+        entity:
+          filter:
+            - domain: light
+
+    interruptores_desligar:
+      name: Interruptor(es) para desligar
+      description: >
+        Opcional. Interruptores que serão desligados antes de iniciar o Mini-sol.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: switch
+
+variables:
+  duracao_config: !input duracao
+  interruptores: !input interruptores_desligar
+  duracao_segundos: >-
+    {{
+      ((duracao_config.get('hours', 0) | int) * 3600)
+      + ((duracao_config.get('minutes', 0) | int) * 60)
+      + (duracao_config.get('seconds', 0) | int)
+    }}
+
+sequence:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ interruptores | length > 0 }}"
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: !input interruptores_desligar
+
+  - action: light.turn_on
+    target:
+      entity_id: !input lampada
+    data:
+      brightness: 1
+
+  - repeat:
+      count: 50
+      sequence:
+        - action: light.turn_on
+          target:
+            entity_id: !input lampada
+          data:
+            brightness_step: 1
+
+        - delay: "{{ (duracao_segundos | float) / 50 }}"
+
+mode: single

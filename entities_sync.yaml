@@ -1,0 +1,83 @@
+blueprint:
+  name: Sincronização de Múltiplas Entidades
+  description: >
+    Mantém duas ou mais entidades de luz ou interruptor sincronizadas.
+
+    Ao alterar qualquer uma das entidades para ligado ou desligado, altera as demais para o mesmo Estado.
+
+    Pode misturar livremente entidades de luz e interruptor.
+  domain: automation
+
+  input:
+    entidades:
+      name: Entidades
+      description: >
+        Selecione pelo menos duas luzes ou interruptores que devem
+        permanecer sincronizados.
+      selector:
+        entity:
+          multiple: true
+          reorder: true
+          filter:
+            - domain: switch
+            - domain: light
+
+variables:
+  entidades: !input entidades
+
+triggers:
+  - trigger: state
+    entity_id: !input entidades
+    from:
+      - "on"
+      - "off"
+    to:
+      - "on"
+      - "off"
+
+conditions:
+  - condition: template
+    value_template: "{{ entidades | count >= 2 }}"
+
+actions:
+  - variables:
+      estado_desejado: "{{ trigger.to_state.state }}"
+
+      alvos: >
+        {% set ns = namespace(entidades=[]) %}
+
+        {% for entidade in entidades %}
+          {% if
+            entidade != trigger.entity_id
+            and states(entidade) != estado_desejado
+            and states(entidade) not in ['unknown', 'unavailable']
+          %}
+            {% set ns.entidades = ns.entidades + [entidade] %}
+          {% endif %}
+        {% endfor %}
+
+        {{ ns.entidades }}
+
+  - condition: template
+    value_template: "{{ alvos | count > 0 }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ estado_desejado == 'on' }}"
+        sequence:
+          - action: homeassistant.turn_on
+            target:
+              entity_id: "{{ alvos }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ estado_desejado == 'off' }}"
+        sequence:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: "{{ alvos }}"
+
+mode: queued
+max: 50
+max_exceeded: silent
