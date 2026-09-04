@@ -1,23 +1,20 @@
 blueprint:
   name: Sincronizar Interruptores/Luzes por Horário
   description: >
-    Sincroniza uma entidade base com diferentes luzes ou interruptores
-    conforme o horário.
+    Sincroniza um interruptor-base com diferentes luzes e/ou interruptores de acordo com o horário.
 
-    Tanto a entidade base quanto os alvos podem ser entidades light ou switch.
-
-    A sincronização é bidirecional:
-    - alterar a entidade base altera o alvo da rota ativa;
-    - alterar o alvo da rota ativa altera a entidade base.
-
-    A lâmpada pode permanecer permanentemente alimentada; o interruptor
-    funciona apenas como comando lógico.
-
+    Tanto a base quanto os alvos podem ser do tipo light ou switch. Logicamente a base será sempre um interruptor na prática;
+    mas principalmente por causa de controles inteligentes para ventilador, quando há interruptor de luz neles, a entidade é por padrão
+    reconhecida como light.
+    A sincronização é bidirecional. Ligar/desligar o interruptor-base liga/desliga a luz, e vice-versa.
     Se o horário inicial e final forem iguais, a rota fica ativa o dia inteiro.
 
-    Horários atravessando a meia-noite são permitidos,
-    por exemplo 22:00 até 06:00.
-
+    Exemplo de uso:
+     - Das 21h às 5h da manhã, o interruptor do quarto acende e apaga o abajur.
+     - Das 5h às 21h, o interruptor acenderá ou apagará a lâmpada principal do quarto.
+     
+    **Obrigatório que a entidade-alvo esteja ligada direto na energia, e o interruptor-base ligue/desligue o alvo apenas através dessa automação!**
+    Caso não queira depender da rede para conseguir ligar/desligar a luz, recomendado que tenha um outro interruptor só para isso.
   domain: automation
   author: Ferox
 
